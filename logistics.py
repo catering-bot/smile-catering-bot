@@ -755,34 +755,21 @@ async def generate_and_send_pdf(update: Update, context: ContextTypes.DEFAULT_TY
 async def ask_logistics(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
 
-    if "Готово" in text or "готово" in text:
+    if "Готово" in text:
         await update.message.reply_text(
             "👍 Готово! Напишите /smeta для новой сметы.",
             reply_markup=ReplyKeyboardRemove()
         )
         return ConversationHandler.END
 
-    if "Логистику" in text or "логистику" in text:
+    if "Логистику" in text:
         from logistics import LOGISTICS
         fmt = context.user_data.get('format', 'Фуршет')
         config = LOGISTICS.get(fmt, LOGISTICS["Фуршет"])
-        packages = config.get("сервировка_пакеты", {})
-
-        keyboard = [[p] for p in packages.keys()]
+        packages = list(config.get("сервировка_пакеты", {}).keys())
+        keyboard = [[p] for p in packages]
         await update.message.reply_text(
             "🍽️ Выберите пакет сервировки:",
-            reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
-        )
-        context.user_data['awaiting_logistics_package'] = True
-        return LOGISTICS_ZONE
-
-    # Если пришёл пакет сервировки
-    if context.user_data.get('awaiting_logistics_package'):
-        context.user_data['logistics_package'] = text
-        context.user_data['awaiting_logistics_package'] = False
-        keyboard = [["📍 Москва", "📍 МО (Московская область)"]]
-        await update.message.reply_text(
-            "📍 Куда доставка?",
             reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
         )
         return LOGISTICS_ZONE
@@ -792,7 +779,7 @@ async def ask_logistics(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def get_logistics_package(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['logistics_package'] = update.message.text
-    keyboard = [["📍 Москва", "📍 МО (Московская область)"]]
+    keyboard = [["📍 Москва", "📍 МО"]]
     await update.message.reply_text(
         "📍 Куда доставка?",
         reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
@@ -800,22 +787,20 @@ async def get_logistics_package(update: Update, context: ContextTypes.DEFAULT_TY
     return LOGISTICS_ZONE
 
 async def get_logistics_zone(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    from logistics import calc_logistics, format_logistics_message
-
     text = update.message.text
 
-    # Если ещё не выбран пакет — это выбор пакета
-    if context.user_data.get('awaiting_logistics_package'):
+    # Если ещё не выбран пакет
+    if not context.user_data.get('logistics_package'):
         context.user_data['logistics_package'] = text
-        context.user_data['awaiting_logistics_package'] = False
-        keyboard = [["📍 Москва", "📍 МО (Московская область)"]]
+        keyboard = [["📍 Москва", "📍 МО"]]
         await update.message.reply_text(
             "📍 Куда доставка?",
             reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
         )
         return LOGISTICS_ZONE
 
-    # Это выбор зоны доставки
+    # Считаем логистику
+    from logistics import calc_logistics, format_logistics_message
     zone = "МО" if "МО" in text else "Москва"
     fmt = context.user_data.get('format', 'Фуршет')
     guests = context.user_data.get('guests', 50)
@@ -826,10 +811,11 @@ async def get_logistics_zone(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     await update.message.reply_text(msg, reply_markup=ReplyKeyboardRemove())
     await update.message.reply_text(
-        f"✅ Логистика рассчитана!\n\n"
-        f"💰 Итого логистика: {result['total_logistics']:,} руб.\n"
+        f"✅ Логистика рассчитана!\n"
+        f"💰 Итого: {result['total_logistics']:,} руб.\n\n"
         f"Напишите /smeta для новой сметы.".replace(',', ' ')
     )
+    context.user_data['logistics_package'] = None
     return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
