@@ -1,12 +1,11 @@
 import os
+import logging
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.units import mm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
-from PIL import Image as PILImage
-import numpy as np
 
 # ─── ЦВЕТА ──────────────────────────────────────────────────────
 GOLD      = colors.HexColor('#BD8F6B')
