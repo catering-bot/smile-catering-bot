@@ -121,11 +121,16 @@ def cat_header(name, subtitle=""):
     ]))
     return r
 
-def generate_pdf(event: dict, selected: list, staff: dict, food_total: float, staff_total: float, grand_total: float) -> str:
+def generate_pdf(event: dict, selected: list, staff: dict, food_total: float, staff_total: float, grand_total: float,
+                 version: str = "internal", discount_label: str = None, discount_amount: float = 0, final_total: float = None) -> str:
     import logging
-    logging.info("generate_pdf: старт")
+    logging.info(f"generate_pdf: старт ({version})")
 
-    out_path = f"/tmp/smeta_{event['client'].replace(' ', '_')}.pdf"
+    if final_total is None:
+        final_total = grand_total
+
+    suffix = "client" if version == "client" else "internal"
+    out_path = f"/tmp/smeta_{suffix}_{event['client'].replace(' ', '_')}.pdf"
 
     doc = SimpleDocTemplate(out_path, pagesize=A4,
         rightMargin=MARGIN, leftMargin=MARGIN, topMargin=MARGIN, bottomMargin=MARGIN)
@@ -354,17 +359,30 @@ def generate_pdf(event: dict, selected: list, staff: dict, food_total: float, st
     story.append(Spacer(1, 4*mm))
 
     # ── ИТОГО ──
-    lt = Table([
+    lt_rows = [
         [Paragraph("Стоимость меню:", ST('total_l')), Paragraph(fmt(food_total), ST('total_v'))],
         [Paragraph("Персонал:", ST('total_l')), Paragraph(fmt(staff_total), ST('total_v'))],
-        [Paragraph("ИТОГО:", ST('grand_l')), Paragraph(fmt(grand_total), ST('grand_v'))],
-        [Paragraph("Стоимость на 1 персону:", ST('total_l')), Paragraph(fmt(grand_total // guests), ST('per'))],
-    ], colWidths=[CW*0.55, CW*0.45])
+    ]
+
+    if discount_label and discount_amount:
+        lt_rows.append([
+            Paragraph(f"{discount_label}:", ST('total_l')),
+            Paragraph(fmt(discount_amount), ST('total_v')),
+        ])
+
+    lt_rows += [
+        [Paragraph("ИТОГО:", ST('grand_l')), Paragraph(fmt(final_total), ST('grand_v'))],
+        [Paragraph("Стоимость на 1 персону:", ST('total_l')), Paragraph(fmt(final_total // guests), ST('per'))],
+    ]
+
+    lt = Table(lt_rows, colWidths=[CW*0.55, CW*0.45])
+    n = len(lt_rows)
     lt.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,-1), DARK2),
         ('TOPPADDING', (0,0), (-1,-1), 7), ('BOTTOMPADDING', (0,0), (-1,-1), 7),
         ('LEFTPADDING', (0,0), (0,-1), 14), ('RIGHTPADDING', (-1,0), (-1,-1), 14),
-        ('LINEABOVE', (0,2), (-1,2), 1.5, GOLD), ('LINEBELOW', (0,2), (-1,2), 0.5, DARK4),
+        ('LINEABOVE', (0, n-2), (-1, n-2), 1.5, GOLD),
+        ('LINEBELOW', (0, n-2), (-1, n-2), 0.5, DARK4),
         ('LINEBELOW', (0,0), (-1,0), 0.3, DARK4),
     ]))
     story.append(lt)
