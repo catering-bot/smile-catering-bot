@@ -14,6 +14,7 @@ TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 CLIENT, FORMAT, GUESTS, DATE, PLACE, TIME, BUDGET, WEIGHT, MODE = range(9)
 AUTO_CONFIRM = 9
 MANUAL_CAT, MANUAL_ITEMS, MANUAL_CONFIRM = 10, 11, 12
+DISCOUNT = 13
 
 # ─── ПЕРСОНАЛ ПО КОЛИЧЕСТВУ ГОСТЕЙ ─────────────────────────────
 def calc_staff(guests: int, fmt: str) -> dict:
@@ -396,11 +397,94 @@ async def auto_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def auto_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     if "PDF" in text:
-        return await generate_and_send_pdf(update, context)
+        return await ask_discount(update, context)
     elif "заново" in text:
         return await auto_mode(update, context)
     else:
         return await manual_mode_start(update, context)
+
+# ─── СКИДКИ И НАЦЕНКИ ──────────────────────────────────────────
+async def ask_discount(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        ["💚 Скидка 5%", "💚 Скидка 10%"],
+        ["🤝 Наценка агенту 5%", "🤝 Наценка агенту 10%"],
+        ["🤝 Наценка агенту 15%", "🤝 Наценка агенту 20%"],
+        ["✏️ Своя скидка/наценка"],
+        ["➡️ Без изменений — генерировать PDF"],
+    ]
+    await update.message.reply_text(
+        "💰 Применить скидку или наценку?\n\n"
+        "• Скидка — уменьшает итоговую сумму клиента\n"
+        "• Наценка агенту — добавляется к сумме (агент получает разницу)\n\n"
+        "Будут сгенерированы ДВЕ версии PDF:\n"
+        "📄 Для клиента (с наценкой)\n"
+        "📄 Внутренняя (без наценки)",
+        reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
+    )
+    return DISCOUNT
+
+async def get_discount(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text
+
+    if "Без изменений" in text or "генерировать" in text:
+        context.user_data['discount'] = 0
+        context.user_data['discount_type'] = None
+        return await generate_and_send_pdf(update, context)
+
+    if "Своя" in text:
+        await update.message.reply_text(
+            "✏️ Введите скидку или наценку:\n\n"
+            "Для скидки: -10 (минус означает скидку)\n"
+            "Для наценки: 15 (просто число — наценка агенту)\n\n"
+            "Введите число:",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        context.user_data['awaiting_custom_discount'] = True
+        return DISCOUNT
+
+    # Парсим процент из текста кнопки
+    import re
+    match = re.search(r'(\d+)%', text)
+    if not match:
+        await update.message.reply_text("Пожалуйста выберите из предложенных вариантов.")
+        return DISCOUNT
+
+    pct = int(match.group(1))
+
+    if "Скидка" in text:
+        context.user_data['discount'] = -pct
+        context.user_data['discount_type'] = 'discount'
+        context.user_data['discount_label'] = f"Скидка {pct}%"
+    else:
+        context.user_data['discount'] = pct
+        context.user_data['discount_type'] = 'agent'
+        context.user_data['discount_label'] = f"Наценка агенту {pct}%"
+
+    return await generate_and_send_pdf(update, context)
+
+async def get_custom_discount(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обрабатывает ввод своей скидки/наценки"""
+    if not context.user_data.get('awaiting_custom_discount'):
+        return DISCOUNT
+
+    try:
+        val = int(update.message.text.strip())
+    except:
+        await update.message.reply_text("Введите число, например: -10 или 15")
+        return DISCOUNT
+
+    context.user_data['awaiting_custom_discount'] = False
+
+    if val < 0:
+        context.user_data['discount'] = val
+        context.user_data['discount_type'] = 'discount'
+        context.user_data['discount_label'] = f"Скидка {abs(val)}%"
+    else:
+        context.user_data['discount'] = val
+        context.user_data['discount_type'] = 'agent'
+        context.user_data['discount_label'] = f"Наценка агенту {val}%"
+
+    return await generate_and_send_pdf(update, context)
 
 # ─── РУЧНОЙ РЕЖИМ ──────────────────────────────────────────────
 async def manual_mode_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -540,25 +624,122 @@ async def generate_and_send_pdf(update: Update, context: ContextTypes.DEFAULT_TY
         "manager": "Елена Смирнова",
     }
 
-    try:
-        pdf_path = generate_pdf(event_data, selected, data.get('staff', {}), food_total, staff_total, grand_total)
+# ─── ГЕНЕРАЦИЯ PDF ─────────────────────────────────────────────
+async def generate_and_send_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    from pdf_generator import generate_pdf
+    import traceback
 
-        with open(pdf_path, 'rb') as f:
+    await update.message.reply_text(
+        "📄 Генерирую PDF смету...",
+        reply_markup=ReplyKeyboardRemove()
+    )
+
+    data = context.user_data
+    selected = data.get('selected', [])
+
+    food_total = sum(item['total'] for item in selected)
+    staff_total = data.get('staff_total', 0)
+    grand_total = food_total + staff_total
+    guests = data['guests']
+
+    # Скидка или наценка
+    discount_pct = data.get('discount', 0)
+    discount_type = data.get('discount_type', None)
+    discount_label = data.get('discount_label', '')
+
+    if discount_pct != 0:
+        discount_amount = round(grand_total * abs(discount_pct) / 100)
+        if discount_pct < 0:
+            client_total = grand_total - discount_amount
+        else:
+            client_total = grand_total + discount_amount
+    else:
+        client_total = grand_total
+        discount_amount = 0
+
+    event_data = {
+        "client": data.get('client', ''),
+        "format": data.get('format', ''),
+        "guests": guests,
+        "date": data.get('date', ''),
+        "place": data.get('place', ''),
+        "time": data.get('time', ''),
+        "budget": data.get('budget', 0),
+        "target_weight": data.get('weight', 0),
+        "number": "001",
+        "manager": "Елена Смирнова",
+    }
+
+    try:
+        logging.info(f"Генерирую PDF для {event_data['client']}")
+
+        # ── Версия 1: Внутренняя (без наценки) ──
+        pdf_internal = generate_pdf(
+            event_data, selected,
+            data.get('staff', {}),
+            food_total, staff_total, grand_total,
+            version="internal",
+            discount_label=None,
+            discount_amount=0,
+            final_total=grand_total,
+        )
+
+        with open(pdf_internal, 'rb') as f:
             await update.message.reply_document(
                 document=f,
-                filename=f"Смета_{event_data['client']}_{event_data['date']}.pdf",
-                caption=(
-                    f"✅ Смета готова!\n\n"
-                    f"👤 {event_data['client']}\n"
-                    f"🍽️ {event_data['format']} • {guests} гостей\n"
-                    f"📅 {event_data['date']}\n"
-                    f"💰 Итого: {grand_total:,.0f} руб.\n"
-                    f"👤 На персону: {grand_total//guests:,.0f} руб."
-                ).replace(',', ' ')
+                filename=f"Смета_внутренняя_{event_data['client']}.pdf",
+                caption=f"📄 Внутренняя смета\n\n"
+                        f"👤 {event_data['client']}\n"
+                        f"🍽️ {event_data['format']} • {guests} гостей\n"
+                        f"📅 {event_data['date']}\n"
+                        f"💰 Итого: {grand_total:,} руб.\n"
+                        f"👤 На персону: {grand_total//guests:,} руб.".replace(',', ' ')
             )
+
+        # ── Версия 2: Для клиента (с наценкой/скидкой если есть) ──
+        if discount_pct != 0:
+            pdf_client = generate_pdf(
+                event_data, selected,
+                data.get('staff', {}),
+                food_total, staff_total, grand_total,
+                version="client",
+                discount_label=discount_label,
+                discount_amount=discount_amount,
+                final_total=client_total,
+            )
+
+            with open(pdf_client, 'rb') as f:
+                await update.message.reply_document(
+                    document=f,
+                    filename=f"Смета_клиент_{event_data['client']}.pdf",
+                    caption=f"📄 Смета для клиента\n\n"
+                            f"👤 {event_data['client']}\n"
+                            f"🍽️ {event_data['format']} • {guests} гостей\n"
+                            f"📅 {event_data['date']}\n"
+                            f"{'💚 ' + discount_label if discount_pct < 0 else '💰 ' + discount_label}\n"
+                            f"💰 Итого: {client_total:,} руб.\n"
+                            f"👤 На персону: {client_total//guests:,} руб.".replace(',', ' ')
+                )
+
+            # Сводка разницы для менеджера
+            if discount_type == 'agent':
+                await update.message.reply_text(
+                    f"🤝 Сводка по агентской наценке:\n\n"
+                    f"Наша цена: {grand_total:,} руб.\n"
+                    f"Цена клиенту: {client_total:,} руб.\n"
+                    f"Агентское вознаграждение: {discount_amount:,} руб. ({abs(discount_pct)}%)".replace(',', ' ')
+                )
+        else:
+            await update.message.reply_text("✅ Смета готова!")
+
+        logging.info("PDF успешно отправлен!")
+
     except Exception as e:
-        logging.error(f"Ошибка генерации PDF: {e}")
-        await update.message.reply_text(f"❌ Ошибка: {e}")
+        err = traceback.format_exc()
+        logging.error(f"Ошибка генерации PDF:\n{err}")
+        await update.message.reply_text(
+            f"❌ Ошибка при генерации PDF:\n\n{str(e)}\n\nНапишите /smeta чтобы попробовать снова."
+        )
 
     return ConversationHandler.END
 
@@ -600,6 +781,8 @@ def main():
             WEIGHT:         [MessageHandler(filters.TEXT & ~filters.COMMAND, get_weight)],
             MODE:           [MessageHandler(filters.TEXT & ~filters.COMMAND, get_mode)],
             AUTO_CONFIRM:   [MessageHandler(filters.TEXT & ~filters.COMMAND, auto_confirm)],
+            DISCOUNT:       [MessageHandler(filters.TEXT & ~filters.COMMAND, get_discount),
+                             MessageHandler(filters.TEXT & ~filters.COMMAND, get_custom_discount)],
             MANUAL_ITEMS:   [MessageHandler(filters.TEXT & ~filters.COMMAND, manual_select_item)],
         },
         fallbacks=[
