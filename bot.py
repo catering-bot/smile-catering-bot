@@ -169,8 +169,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "👋 Добро пожаловать в SmiLe Catering!\n\n"
         "Команды:\n"
-        "/смета — создать новую смету\n"
-        "/помощь — справка",
+        "/smeta — создать новую смету\n"
+        "/help — справка",
         reply_markup=ReplyKeyboardRemove()
     )
 
@@ -538,8 +538,8 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "📖 Справка SmiLe Catering Bot\n\n"
-        "/смета — создать новую смету\n"
-        "/отмена — отменить текущую смету\n\n"
+        "/smeta — создать новую смету\n"
+        "/cancel — отменить текущую смету\n\n"
         "Бот умеет:\n"
         "🤖 Авто-подбор меню под бюджет и выход\n"
         "✋ Ручной выбор позиций из Excel\n"
@@ -552,8 +552,8 @@ def main():
 
     conv = ConversationHandler(
         entry_points=[
-            CommandHandler("смета", new_smeta),
             CommandHandler("smeta", new_smeta),
+            CommandHandler("new", new_smeta),
         ],
         states={
             CLIENT:         [MessageHandler(filters.TEXT & ~filters.COMMAND, get_client)],
@@ -569,13 +569,13 @@ def main():
             MANUAL_ITEMS:   [MessageHandler(filters.TEXT & ~filters.COMMAND, manual_select_item)],
         },
         fallbacks=[
-            CommandHandler("отмена", cancel),
             CommandHandler("cancel", cancel),
+            CommandHandler("stop", cancel),
         ],
     )
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("помощь", help_cmd))
+    app.add_handler(CommandHandler("help", help_cmd))
     app.add_handler(conv)
 
     print("🤖 SmiLe Catering Bot запущен!")
