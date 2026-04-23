@@ -32,9 +32,13 @@ def prepare_logo():
     out_path = "/tmp/logo_dark.png"
 
     if not os.path.exists(logo_path):
+        logging.warning("logo.png не найден!")
         return None
 
     try:
+        from PIL import Image as PILImage
+        import numpy as np
+
         img = PILImage.open(logo_path).convert('RGBA')
         arr = np.array(img)
         result = arr.copy()
@@ -48,9 +52,10 @@ def prepare_logo():
         result[white] = [26, 26, 26, 255]
 
         PILImage.fromarray(result, 'RGBA').save(out_path)
+        logging.info("Логотип подготовлен успешно")
         return out_path
     except Exception as e:
-        print(f"Logo error: {e}")
+        logging.error(f"Ошибка обработки логотипа: {e}")
         return None
 
 def fmt(n):
@@ -127,15 +132,20 @@ def cat_header(name, subtitle=""):
     return r
 
 def generate_pdf(event: dict, selected: list, staff: dict, food_total: float, staff_total: float, grand_total: float) -> str:
-    out_path = f"/tmp/smeta_{event['client'].replace(' ', '_')}_{event['date'].replace(' ', '_')}.pdf"
+    import logging
+    logging.info("generate_pdf: старт")
+
+    out_path = f"/tmp/smeta_{event['client'].replace(' ', '_')}.pdf"
 
     doc = SimpleDocTemplate(out_path, pagesize=A4,
         rightMargin=MARGIN, leftMargin=MARGIN, topMargin=MARGIN, bottomMargin=MARGIN)
     story = []
 
-    # ── ЛОГОТИП ──
+    logging.info("generate_pdf: подготовка логотипа")
     logo_path = prepare_logo()
+    logging.info(f"generate_pdf: логотип = {logo_path}")
 
+    logging.info("generate_pdf: строим шапку")
     # ── ШАПКА ──
     if logo_path:
         logo = RLImage(logo_path, width=22*mm, height=22*mm)
@@ -381,6 +391,7 @@ def generate_pdf(event: dict, selected: list, staff: dict, food_total: float, st
     ]))
     story.append(footer)
 
+    logging.info("generate_pdf: запускаем doc.build")
     def dark_bg(canvas, doc):
         canvas.saveState()
         canvas.setFillColor(DARK_BG)
@@ -388,4 +399,5 @@ def generate_pdf(event: dict, selected: list, staff: dict, food_total: float, st
         canvas.restoreState()
 
     doc.build(story, onFirstPage=dark_bg, onLaterPages=dark_bg)
+    logging.info(f"generate_pdf: PDF готов! {out_path}")
     return out_path
