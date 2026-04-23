@@ -27,36 +27,13 @@ PARTNERS = "Партнёры Forbes  •  The Art Newspaper Russia  •  С 2016
 SLOGAN   = "Больше, чем просто еда — мы создаём состояние праздника"
 
 def prepare_logo():
-    """Подготавливает логотип — перекрашивает бирюзу в белый"""
+    """Загружает готовый логотип"""
     logo_path = "logo.png"
-    out_path = "/tmp/logo_dark.png"
-
     if not os.path.exists(logo_path):
         logging.warning("logo.png не найден!")
         return None
-
-    try:
-        from PIL import Image as PILImage
-        import numpy as np
-
-        img = PILImage.open(logo_path).convert('RGBA')
-        arr = np.array(img)
-        result = arr.copy()
-
-        teal  = (arr[:,:,0] < 100) & (arr[:,:,1] > 80) & (arr[:,:,2] > 80) & (arr[:,:,3] > 50)
-        black = (arr[:,:,0] < 30)  & (arr[:,:,1] < 30) & (arr[:,:,2] < 30) & (arr[:,:,3] > 50)
-        white = (arr[:,:,0] > 200) & (arr[:,:,1] > 200) & (arr[:,:,2] > 200)
-
-        result[teal]  = [255, 255, 255, 255]
-        result[black] = [0, 0, 0, 0]
-        result[white] = [26, 26, 26, 255]
-
-        PILImage.fromarray(result, 'RGBA').save(out_path)
-        logging.info("Логотип подготовлен успешно")
-        return out_path
-    except Exception as e:
-        logging.error(f"Ошибка обработки логотипа: {e}")
-        return None
+    logging.info("Логотип найден!")
+    return logo_path
 
 def fmt(n):
     return f"{int(n):,}".replace(',', ' ') + " руб."
