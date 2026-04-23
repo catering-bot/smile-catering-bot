@@ -101,66 +101,100 @@ def load_menu() -> dict:
 def auto_select_menu(fmt: str, guests: int, food_budget: float, target_weight: int) -> list:
     """
     Подбирает блюда под бюджет и выход в граммах.
-    Возвращает список выбранных позиций.
+    Гарантирует наличие всех ключевых категорий.
     """
     menu = load_menu()
-    portions = PORTIONS.get(fmt, PORTIONS["Фуршет"])
 
+    # Обязательные категории для каждого формата
+    REQUIRED_CATS = {
+        "Фуршет": {
+            "канапе":           {"portions": 5, "count": 3, "keywords": ["канапе"]},
+            "брускетта":        {"portions": 2, "count": 2, "keywords": ["брускетта", "мини-брускетта"]},
+            "тарталетки":       {"portions": 2, "count": 2, "keywords": ["тарталетки", "тонкого теста", "вонтон", "такос"]},
+            "салаты":           {"portions": 1, "count": 2, "keywords": ["салаты", "салат"]},
+            "горячее":          {"portions": 1, "count": 2, "keywords": ["горячее", "горячие закуски"]},
+            "десерты":          {"portions": 2, "count": 2, "keywords": ["десерт", "выпечка"]},
+            "напитки холодные": {"portions": 3, "count": 2, "keywords": ["прохладительные", "напитки", "лимонад", "морс"]},
+            "напитки горячие":  {"portions": 1, "count": 1, "keywords": ["горячие напитки", "чай", "кофе"]},
+        },
+        "Банкет": {
+            "закуски":          {"portions": 1, "count": 2, "keywords": ["закуски", "канапе"]},
+            "салаты":           {"portions": 1, "count": 2, "keywords": ["салаты", "салат"]},
+            "горячее":          {"portions": 1, "count": 2, "keywords": ["банкетное горячее", "горячее"]},
+            "десерты":          {"portions": 2, "count": 2, "keywords": ["десерт", "выпечка"]},
+            "напитки холодные": {"portions": 3, "count": 2, "keywords": ["прохладительные", "лимонад", "морс"]},
+            "напитки горячие":  {"portions": 1, "count": 1, "keywords": ["горячие напитки", "чай", "кофе"]},
+        },
+        "BBQ": {
+            "bbq":              {"portions": 3, "count": 3, "keywords": ["ввq", "bbq", "шашлык", "гриль"]},
+            "салаты":           {"portions": 1, "count": 2, "keywords": ["салаты", "допы"]},
+            "десерты":          {"portions": 1, "count": 2, "keywords": ["десерт", "фрукты"]},
+            "напитки холодные": {"portions": 3, "count": 2, "keywords": ["прохладительные", "лимонад", "морс"]},
+            "напитки горячие":  {"portions": 1, "count": 1, "keywords": ["горячие напитки", "чай"]},
+        },
+    }
+
+    required = REQUIRED_CATS.get(fmt, REQUIRED_CATS["Фуршет"])
+
+    def find_menu_cat(keywords: list) -> tuple:
+        """Находит категорию в меню по ключевым словам"""
+        menu_lower = {k.lower(): k for k in menu.keys()}
+        for kw in keywords:
+            for cat_low, cat_orig in menu_lower.items():
+                if kw in cat_low:
+                    return cat_orig, menu[cat_orig]
+        return None, []
+
+    import random
     selected = []
     total_cost = 0
     total_weight = 0
-    budget_per_person = food_budget / guests
+    budget_per_cat = food_budget / len(required)
 
-    # Приоритет категорий
-    cat_priority = list(portions.keys())
+    for cat_name, cfg in required.items():
+        portions_pp = cfg["portions"]
+        count = cfg["count"]
+        keywords = cfg["keywords"]
 
-    for cat in cat_priority:
-        if cat not in menu or not menu[cat]:
-            # Пробуем найти похожую категорию
-            found = False
-            for menu_cat in menu:
-                if cat in menu_cat or menu_cat in cat:
-                    cat = menu_cat
-                    found = True
-                    break
-            if not found:
-                continue
+        # Находим нужную категорию в меню
+        found_cat, items = find_menu_cat(keywords)
+        if not found_cat or not items:
+            continue
 
-        items = menu[cat]
-        portions_per_person = portions.get(cat, 1)
-        total_portions = portions_per_person * guests
+        total_portions = portions_pp * guests
 
-        # Сортируем по соотношению цена/грамм
-        items_sorted = sorted(items, key=lambda x: x['price'] / max(x['weight'], 1))
+        # Перемешиваем для разнообразия
+        items_shuffled = items.copy()
+        random.shuffle(items_shuffled)
 
-        # Берём 2-3 позиции из категории
-        count = 3 if cat in ["канапе", "горячее", "салаты"] else 2
+        # Сортируем по цене (средний диапазон — не самые дешёвые и не самые дорогие)
+        items_sorted = sorted(items_shuffled, key=lambda x: x['price'])
+        mid = len(items_sorted) // 4
+        items_mid = items_sorted[mid:] if len(items_sorted) > 4 else items_sorted
+
         picked = 0
-
-        for item in items_sorted:
+        for item in items_mid:
             if picked >= count:
                 break
 
             cost = item['price'] * total_portions
-            weight_contribution = item['weight'] * portions_per_person
+            weight_pp = item['weight'] * portions_pp
 
-            # Проверяем не превышаем ли бюджет
-            if total_cost + cost <= food_budget * 0.95:
-                selected.append({
-                    "category": cat.upper(),
-                    "name": item['name'],
-                    "qty": total_portions,
-                    "qty_label": f"{total_portions} порц.",
-                    "price": item['price'],
-                    "price_label": f"{item['price']:.0f} руб.",
-                    "total": cost,
-                    "total_label": f"{cost:,.0f} руб.".replace(',', ' '),
-                    "weight_per_person": item['weight'] * portions_per_person,
-                    "desc": f"Выход {item['weight']:.0f} гр/порц.",
-                })
-                total_cost += cost
-                total_weight += weight_contribution
-                picked += 1
+            selected.append({
+                "category": cat_name.upper(),
+                "name": item['name'],
+                "qty": total_portions,
+                "qty_label": f"{total_portions} порц.",
+                "price": item['price'],
+                "price_label": f"{item['price']:.0f} руб.",
+                "total": cost,
+                "total_label": f"{cost:,.0f} руб.".replace(',', ' '),
+                "weight_per_person": weight_pp,
+                "desc": f"Выход {item['weight']:.0f} гр/порц.",
+            })
+            total_cost += cost
+            total_weight += weight_pp
+            picked += 1
 
     return selected, total_cost, total_weight
 
