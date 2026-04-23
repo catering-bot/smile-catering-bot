@@ -6,6 +6,20 @@ from reportlab.lib.units import mm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+
+def register_fonts():
+    for name, fname in [('DejaVu','DejaVuSans.ttf'),('DejaVu-Bold','DejaVuSans-Bold.ttf'),('DejaVu-Italic','DejaVuSans-Oblique.ttf')]:
+        try:
+            pdfmetrics.registerFont(TTFont(name, fname))
+        except Exception as e:
+            logging.warning(f"Шрифт {fname} не найден: {e}")
+
+register_fonts()
+FONT = 'DejaVu'
+FONT_BOLD = 'DejaVu-Bold'
+FONT_ITALIC = 'DejaVu-Italic'
 
 # ─── ЦВЕТА ──────────────────────────────────────────────────────
 GOLD      = colors.HexColor('#BD8F6B')
@@ -39,38 +53,38 @@ def fmt(n):
 
 def ST(name):
     styles = {
-        'slogan':       ParagraphStyle('slogan',      fontSize=9.5, textColor=GOLD_LIGHT, alignment=TA_CENTER, fontName='Helvetica-Oblique', leading=13),
-        'partners':     ParagraphStyle('partners',    fontSize=6.5, textColor=GRAY,       alignment=TA_CENTER, fontName='Helvetica', leading=9),
-        'smeta_label':  ParagraphStyle('smeta_label', fontSize=6.5, textColor=GRAY,       alignment=TA_RIGHT,  fontName='Helvetica', leading=9),
-        'smeta_val':    ParagraphStyle('smeta_val',   fontSize=11,  textColor=LIGHT_GRAY, alignment=TA_RIGHT,  fontName='Helvetica-Bold', leading=14),
-        'event_val':    ParagraphStyle('event_val',   fontSize=8.5, textColor=GOLD,       alignment=TA_RIGHT,  fontName='Helvetica-Bold', leading=11),
-        'smeta_lbl_l':  ParagraphStyle('smeta_lbl_l', fontSize=6.5, textColor=GRAY,       alignment=TA_LEFT,   fontName='Helvetica', leading=9),
-        'event_val_l':  ParagraphStyle('event_val_l', fontSize=8.5, textColor=GOLD,       alignment=TA_LEFT,   fontName='Helvetica-Bold', leading=11),
-        'brand_name':   ParagraphStyle('brand_name',  fontSize=18,  textColor=LIGHT_GRAY, alignment=TA_CENTER, fontName='Helvetica-Bold', leading=22),
-        'brand_sub':    ParagraphStyle('brand_sub',   fontSize=7,   textColor=GRAY,       alignment=TA_CENTER, fontName='Helvetica', leading=9, tracking=4),
-        'client_lbl':   ParagraphStyle('client_lbl',  fontSize=6.5, textColor=GRAY,       alignment=TA_CENTER, fontName='Helvetica', leading=9),
-        'client_val':   ParagraphStyle('client_val',  fontSize=8,   textColor=LIGHT_GRAY, alignment=TA_CENTER, fontName='Helvetica-Bold', leading=11),
-        'cat':          ParagraphStyle('cat',          fontSize=7,   textColor=GOLD,       fontName='Helvetica-Bold', leading=9, tracking=2),
-        'cat_sub':      ParagraphStyle('cat_sub',      fontSize=6,   textColor=GRAY,       fontName='Helvetica', leading=8),
-        'col_h':        ParagraphStyle('col_h',        fontSize=6,   textColor=GRAY,       alignment=TA_RIGHT,  fontName='Helvetica', leading=8),
-        'col_h_l':      ParagraphStyle('col_h_l',      fontSize=6,   textColor=GRAY,       alignment=TA_LEFT,   fontName='Helvetica', leading=8),
-        'dish':         ParagraphStyle('dish',         fontSize=7.5, textColor=LIGHT_GRAY, fontName='Helvetica', leading=10),
-        'desc':         ParagraphStyle('desc',         fontSize=6.5, textColor=GRAY,       fontName='Helvetica-Oblique', leading=9),
-        'qty':          ParagraphStyle('qty',          fontSize=7.5, textColor=GRAY,       alignment=TA_CENTER, fontName='Helvetica', leading=10),
-        'price':        ParagraphStyle('price',        fontSize=7.5, textColor=GRAY,       alignment=TA_RIGHT,  fontName='Helvetica', leading=10),
-        'amount':       ParagraphStyle('amount',       fontSize=7.5, textColor=LIGHT_GRAY, alignment=TA_RIGHT,  fontName='Helvetica-Bold', leading=10),
-        'total_l':      ParagraphStyle('total_l',      fontSize=8,   textColor=GRAY,       fontName='Helvetica', leading=11),
-        'total_v':      ParagraphStyle('total_v',      fontSize=8,   textColor=LIGHT_GRAY, alignment=TA_RIGHT,  fontName='Helvetica', leading=11),
-        'grand_l':      ParagraphStyle('grand_l',      fontSize=14,  textColor=GOLD,       fontName='Helvetica-Bold', leading=17),
-        'grand_v':      ParagraphStyle('grand_v',      fontSize=14,  textColor=GOLD,       alignment=TA_RIGHT,  fontName='Helvetica-Bold', leading=17),
-        'per':          ParagraphStyle('per',           fontSize=7.5, textColor=GRAY,       alignment=TA_RIGHT,  fontName='Helvetica', leading=10),
-        'note_lbl':     ParagraphStyle('note_lbl',     fontSize=6.5, textColor=GRAY,       fontName='Helvetica', leading=9),
-        'note_val':     ParagraphStyle('note_val',     fontSize=7,   textColor=LIGHT_GRAY, fontName='Helvetica', leading=10),
-        'footer':       ParagraphStyle('footer',       fontSize=6.5, textColor=GRAY,       alignment=TA_CENTER, fontName='Helvetica', leading=9),
-        'why_title':    ParagraphStyle('why_title',    fontSize=7,   textColor=GOLD,       alignment=TA_CENTER, fontName='Helvetica-Bold', leading=9),
-        'why_text':     ParagraphStyle('why_text',     fontSize=6,   textColor=GRAY,       alignment=TA_CENTER, fontName='Helvetica', leading=8),
-        'budget_ok':    ParagraphStyle('budget_ok',    fontSize=8,   textColor=colors.HexColor('#4CAF50'), alignment=TA_CENTER, fontName='Helvetica-Bold', leading=10),
-        'budget_warn':  ParagraphStyle('budget_warn',  fontSize=8,   textColor=colors.HexColor('#FF9800'), alignment=TA_CENTER, fontName='Helvetica-Bold', leading=10),
+        'slogan':       ParagraphStyle('slogan',      fontSize=9.5, textColor=GOLD_LIGHT, alignment=TA_CENTER, fontName=FONT_ITALIC, leading=13),
+        'partners':     ParagraphStyle('partners',    fontSize=6.5, textColor=GRAY,       alignment=TA_CENTER, fontName=FONT, leading=9),
+        'smeta_label':  ParagraphStyle('smeta_label', fontSize=6.5, textColor=GRAY,       alignment=TA_RIGHT,  fontName=FONT, leading=9),
+        'smeta_val':    ParagraphStyle('smeta_val',   fontSize=11,  textColor=LIGHT_GRAY, alignment=TA_RIGHT,  fontName=FONT_BOLD, leading=14),
+        'event_val':    ParagraphStyle('event_val',   fontSize=8.5, textColor=GOLD,       alignment=TA_RIGHT,  fontName=FONT_BOLD, leading=11),
+        'smeta_lbl_l':  ParagraphStyle('smeta_lbl_l', fontSize=6.5, textColor=GRAY,       alignment=TA_LEFT,   fontName=FONT, leading=9),
+        'event_val_l':  ParagraphStyle('event_val_l', fontSize=8.5, textColor=GOLD,       alignment=TA_LEFT,   fontName=FONT_BOLD, leading=11),
+        'brand_name':   ParagraphStyle('brand_name',  fontSize=18,  textColor=LIGHT_GRAY, alignment=TA_CENTER, fontName=FONT_BOLD, leading=22),
+        'brand_sub':    ParagraphStyle('brand_sub',   fontSize=7,   textColor=GRAY,       alignment=TA_CENTER, fontName=FONT, leading=9, tracking=4),
+        'client_lbl':   ParagraphStyle('client_lbl',  fontSize=6.5, textColor=GRAY,       alignment=TA_CENTER, fontName=FONT, leading=9),
+        'client_val':   ParagraphStyle('client_val',  fontSize=8,   textColor=LIGHT_GRAY, alignment=TA_CENTER, fontName=FONT_BOLD, leading=11),
+        'cat':          ParagraphStyle('cat',          fontSize=7,   textColor=GOLD,       fontName=FONT_BOLD, leading=9, tracking=2),
+        'cat_sub':      ParagraphStyle('cat_sub',      fontSize=6,   textColor=GRAY,       fontName=FONT, leading=8),
+        'col_h':        ParagraphStyle('col_h',        fontSize=6,   textColor=GRAY,       alignment=TA_RIGHT,  fontName=FONT, leading=8),
+        'col_h_l':      ParagraphStyle('col_h_l',      fontSize=6,   textColor=GRAY,       alignment=TA_LEFT,   fontName=FONT, leading=8),
+        'dish':         ParagraphStyle('dish',         fontSize=7.5, textColor=LIGHT_GRAY, fontName=FONT, leading=10),
+        'desc':         ParagraphStyle('desc',         fontSize=6.5, textColor=GRAY,       fontName=FONT_ITALIC, leading=9),
+        'qty':          ParagraphStyle('qty',          fontSize=7.5, textColor=GRAY,       alignment=TA_CENTER, fontName=FONT, leading=10),
+        'price':        ParagraphStyle('price',        fontSize=7.5, textColor=GRAY,       alignment=TA_RIGHT,  fontName=FONT, leading=10),
+        'amount':       ParagraphStyle('amount',       fontSize=7.5, textColor=LIGHT_GRAY, alignment=TA_RIGHT,  fontName=FONT_BOLD, leading=10),
+        'total_l':      ParagraphStyle('total_l',      fontSize=8,   textColor=GRAY,       fontName=FONT, leading=11),
+        'total_v':      ParagraphStyle('total_v',      fontSize=8,   textColor=LIGHT_GRAY, alignment=TA_RIGHT,  fontName=FONT, leading=11),
+        'grand_l':      ParagraphStyle('grand_l',      fontSize=14,  textColor=GOLD,       fontName=FONT_BOLD, leading=17),
+        'grand_v':      ParagraphStyle('grand_v',      fontSize=14,  textColor=GOLD,       alignment=TA_RIGHT,  fontName=FONT_BOLD, leading=17),
+        'per':          ParagraphStyle('per',           fontSize=7.5, textColor=GRAY,       alignment=TA_RIGHT,  fontName=FONT, leading=10),
+        'note_lbl':     ParagraphStyle('note_lbl',     fontSize=6.5, textColor=GRAY,       fontName=FONT, leading=9),
+        'note_val':     ParagraphStyle('note_val',     fontSize=7,   textColor=LIGHT_GRAY, fontName=FONT, leading=10),
+        'footer':       ParagraphStyle('footer',       fontSize=6.5, textColor=GRAY,       alignment=TA_CENTER, fontName=FONT, leading=9),
+        'why_title':    ParagraphStyle('why_title',    fontSize=7,   textColor=GOLD,       alignment=TA_CENTER, fontName=FONT_BOLD, leading=9),
+        'why_text':     ParagraphStyle('why_text',     fontSize=6,   textColor=GRAY,       alignment=TA_CENTER, fontName=FONT, leading=8),
+        'budget_ok':    ParagraphStyle('budget_ok',    fontSize=8,   textColor=colors.HexColor('#4CAF50'), alignment=TA_CENTER, fontName=FONT_BOLD, leading=10),
+        'budget_warn':  ParagraphStyle('budget_warn',  fontSize=8,   textColor=colors.HexColor('#FF9800'), alignment=TA_CENTER, fontName=FONT_BOLD, leading=10),
     }
     return styles[name]
 
