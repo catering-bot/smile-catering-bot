@@ -16,6 +16,7 @@ AUTO_CONFIRM = 9
 MANUAL_CAT, MANUAL_ITEMS, MANUAL_CONFIRM = 10, 11, 12
 DISCOUNT = 13
 LOGISTICS_PACKAGE, LOGISTICS_ZONE = 14, 15
+LOGISTICS_STEP = 16  # единый шаг для всей логистики
 
 # ─── ПЕРСОНАЛ ПО КОЛИЧЕСТВУ ГОСТЕЙ ─────────────────────────────
 def calc_staff(guests: int, fmt: str) -> dict:
@@ -751,8 +752,8 @@ async def generate_and_send_pdf(update: Update, context: ContextTypes.DEFAULT_TY
         )
 
     return LOGISTICS_PACKAGE
-
 async def ask_logistics(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Первый шаг — спрашиваем хочет ли логистику"""
     text = update.message.text
 
     if "Готово" in text:
@@ -762,69 +763,64 @@ async def ask_logistics(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return ConversationHandler.END
 
-    if "Логистику" in text:
-        from logistics import LOGISTICS
-        fmt = context.user_data.get('format', 'Фуршет')
-        config = LOGISTICS.get(fmt, LOGISTICS["Фуршет"])
-        packages = list(config.get("сервировка_пакеты", {}).keys())
-        keyboard = [[p] for p in packages]
-        context.user_data['logistics_package'] = None
-        await update.message.reply_text(
-            "🍽️ Выберите пакет сервировки:",
-            reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
-        )
-        return LOGISTICS_ZONE
+    # Любое другое — начинаем логистику
+    from logistics import LOGISTICS
+    fmt = context.user_data.get('format', 'Фуршет')
+    config = LOGISTICS.get(fmt, LOGISTICS["Фуршет"])
+    packages = list(config.get("сервировка_пакеты", {}).keys())
 
-    await update.message.reply_text("Пожалуйста выберите из предложенных вариантов.")
-    return LOGISTICS_PACKAGE
+    context.user_data['logistics_step'] = 'package'
+    context.user_data['logistics_package'] = None
 
-async def get_logistics_package(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data['logistics_package'] = update.message.text
-    keyboard = [["📍 Москва", "📍 МО"]]
+    keyboard = [[p] for p in packages]
     await update.message.reply_text(
-        "📍 Куда доставка?",
+        "🍽️ Выберите пакет сервировки:",
         reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
     )
-    return 15
+    return LOGISTICS_STEP
 
-async def get_logistics_zone(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    from logistics import calc_logistics, format_logistics_message
-
+async def handle_logistics_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Единый обработчик всех шагов логистики"""
     text = update.message.text
+    step = context.user_data.get('logistics_step', 'package')
 
-    # Первый вызов — выбор пакета сервировки
-    if not context.user_data.get('logistics_package'):
+    if step == 'package':
+        # Сохраняем пакет — переходим к зоне
         context.user_data['logistics_package'] = text
+        context.user_data['logistics_step'] = 'zone'
         keyboard = [["📍 Москва", "📍 МО"]]
         await update.message.reply_text(
             "📍 Куда доставка?",
             reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
         )
-        return LOGISTICS_ZONE
+        return LOGISTICS_STEP
 
-    # Второй вызов — выбор зоны и расчёт
-    zone = "МО" if "МО" in text else "Москва"
-    fmt = context.user_data.get('format', 'Фуршет')
-    guests = context.user_data.get('guests', 50)
-    package = context.user_data.get('logistics_package', '')
+    elif step == 'zone':
+        # Считаем и показываем результат
+        from logistics import calc_logistics, format_logistics_message
+        zone = "МО" if "МО" in text else "Москва"
+        fmt = context.user_data.get('format', 'Фуршет')
+        guests = context.user_data.get('guests', 50)
+        package = context.user_data.get('logistics_package', '')
 
-    try:
-        result = calc_logistics(fmt, guests, package, zone)
-        msg = format_logistics_message(result)
-        await update.message.reply_text(msg, reply_markup=ReplyKeyboardRemove())
-        await update.message.reply_text(
-            f"✅ Логистика рассчитана!\n"
-            f"💰 Итого: {result['total_logistics']:,} руб.\n\n"
-            f"Напишите /smeta для новой сметы.".replace(',', ' ')
-        )
-    except Exception as e:
-        logging.error(f"Ошибка логистики: {e}")
-        await update.message.reply_text(
-            f"❌ Ошибка: {e}\nНапишите /smeta для новой сметы.",
-            reply_markup=ReplyKeyboardRemove()
-        )
+        try:
+            result = calc_logistics(fmt, guests, package, zone)
+            msg = format_logistics_message(result)
+            await update.message.reply_text(msg, reply_markup=ReplyKeyboardRemove())
+            await update.message.reply_text(
+                f"✅ Готово! Напишите /smeta для новой сметы."
+            )
+        except Exception as e:
+            logging.error(f"Ошибка логистики: {e}")
+            await update.message.reply_text(
+                f"❌ Ошибка: {e}",
+                reply_markup=ReplyKeyboardRemove()
+            )
 
-    context.user_data['logistics_package'] = None
+        context.user_data['logistics_step'] = None
+        context.user_data['logistics_package'] = None
+        return ConversationHandler.END
+
     return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -869,7 +865,7 @@ def main():
                                  MessageHandler(filters.TEXT & ~filters.COMMAND, get_custom_discount)],
             MANUAL_ITEMS:       [MessageHandler(filters.TEXT & ~filters.COMMAND, manual_select_item)],
             LOGISTICS_PACKAGE:  [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_logistics)],
-            LOGISTICS_ZONE:     [MessageHandler(filters.TEXT & ~filters.COMMAND, get_logistics_zone)],
+            LOGISTICS_STEP:     [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_logistics_step)],
         },
         fallbacks=[
             CommandHandler("cancel", cancel),
