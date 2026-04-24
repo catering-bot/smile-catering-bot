@@ -796,8 +796,9 @@ async def handle_logistics_step(update: Update, context: ContextTypes.DEFAULT_TY
         return LOGISTICS_STEP
 
     elif step == 'zone':
-        # Считаем и показываем результат
         from logistics import calc_logistics, format_logistics_message
+        from pdf_generator import generate_pdf
+
         zone = "МО" if "МО" in text else "Москва"
         fmt = context.user_data.get('format', 'Фуршет')
         guests = context.user_data.get('guests', 50)
@@ -805,13 +806,74 @@ async def handle_logistics_step(update: Update, context: ContextTypes.DEFAULT_TY
 
         try:
             result = calc_logistics(fmt, guests, package, zone)
-            msg = format_logistics_message(result)
-            await update.message.reply_text(msg, reply_markup=ReplyKeyboardRemove())
+
+            # Сохраняем логистику в user_data
+            context.user_data['logistics_result'] = result
+
+            # Генерируем новый PDF с логистикой
             await update.message.reply_text(
-                f"✅ Готово! Напишите /smeta для новой сметы."
+                "📄 Генерирую смету с логистикой...",
+                reply_markup=ReplyKeyboardRemove()
             )
+
+            selected = context.user_data.get('selected', [])
+            food_total = sum(item['total'] for item in selected)
+            staff_total = context.user_data.get('staff_total', 0)
+            grand_total = food_total + staff_total
+            logistics_total = result['total_logistics']
+            final_total = grand_total + logistics_total
+
+            discount_pct = context.user_data.get('discount', 0)
+            discount_label = context.user_data.get('discount_label', '')
+            discount_amount = round(final_total * abs(discount_pct) / 100) if discount_pct else 0
+            if discount_pct < 0:
+                client_total = final_total - discount_amount
+            elif discount_pct > 0:
+                client_total = final_total + discount_amount
+            else:
+                client_total = final_total
+
+            event_data = {
+                "client": context.user_data.get('client', ''),
+                "format": fmt,
+                "guests": guests,
+                "date": context.user_data.get('date', ''),
+                "place": context.user_data.get('place', ''),
+                "time": context.user_data.get('time', ''),
+                "budget": context.user_data.get('budget', 0),
+                "target_weight": context.user_data.get('weight', 0),
+                "number": "001",
+                "manager": "Елена Смирнова",
+            }
+
+            pdf_path = generate_pdf(
+                event_data, selected,
+                context.user_data.get('staff', {}),
+                food_total, staff_total, grand_total,
+                version="internal",
+                discount_label=None,
+                discount_amount=0,
+                final_total=final_total,
+                logistics_result=result,
+            )
+
+            with open(pdf_path, 'rb') as f:
+                await update.message.reply_document(
+                    document=f,
+                    filename=f"Смета_с_логистикой_{event_data['client']}.pdf",
+                    caption=(
+                        f"✅ Смета с логистикой!\n\n"
+                        f"🍽️ Меню + персонал: {grand_total:,} руб.\n"
+                        f"🚚 Логистика: {logistics_total:,} руб.\n"
+                        f"💰 ИТОГО: {final_total:,} руб.\n"
+                        f"👤 На персону: {final_total//guests:,} руб."
+                    ).replace(',', ' ')
+                )
+
         except Exception as e:
             logging.error(f"Ошибка логистики: {e}")
+            import traceback
+            logging.error(traceback.format_exc())
             await update.message.reply_text(
                 f"❌ Ошибка: {e}",
                 reply_markup=ReplyKeyboardRemove()
