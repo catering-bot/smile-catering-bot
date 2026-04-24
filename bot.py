@@ -103,43 +103,47 @@ def load_menu() -> dict:
 # ─── АВТО-ПОДБОР МЕНЮ ──────────────────────────────────────────
 def auto_select_menu(fmt: str, guests: int, food_budget: float, target_weight: int) -> list:
     """
-    Подбирает блюда под бюджет и выход в граммах.
-    Гарантирует наличие всех ключевых категорий.
+    Подбирает разнообразное меню под бюджет и выход в граммах.
+    Для канапе/тарталеток/брускетты — делит порции на несколько видов.
+    Например: 100 гостей × 5 канапе = 500 порций → 4 вида × 125 порций каждый.
     """
     menu = load_menu()
 
-    # Обязательные категории для каждого формата
+    # Конфигурация категорий:
+    # portions_total — общее кол-во порций на гостя
+    # varieties — сколько видов блюд из категории
+    # portions_each — порций каждого вида на гостя (portions_total / varieties)
     REQUIRED_CATS = {
         "Фуршет": {
-            "канапе":           {"portions": 5, "count": 3, "keywords": ["канапе"]},
-            "брускетта":        {"portions": 2, "count": 2, "keywords": ["брускетта", "мини-брускетта"]},
-            "тарталетки":       {"portions": 2, "count": 2, "keywords": ["тарталетки", "тонкого теста", "вонтон", "такос"]},
-            "салаты":           {"portions": 1, "count": 2, "keywords": ["салаты", "салат"]},
-            "горячее":          {"portions": 1, "count": 2, "keywords": ["горячее", "горячие закуски"]},
-            "десерты":          {"portions": 2, "count": 2, "keywords": ["десерт", "выпечка"]},
-            "напитки холодные": {"portions": 3, "count": 2, "keywords": ["прохладительные", "напитки", "лимонад", "морс"]},
-            "напитки горячие":  {"portions": 1, "count": 1, "keywords": ["горячие напитки", "чай", "кофе"]},
+            "канапе":           {"portions_total": 5, "varieties": 4, "keywords": ["канапе"]},
+            "брускетта":        {"portions_total": 2, "varieties": 2, "keywords": ["брускетта", "мини-брускетта"]},
+            "тарталетки":       {"portions_total": 2, "varieties": 2, "keywords": ["тарталетки", "тонкого теста", "вонтон", "такос"]},
+            "салаты":           {"portions_total": 1, "varieties": 2, "keywords": ["салаты", "салат"]},
+            "горячее":          {"portions_total": 1, "varieties": 2, "keywords": ["горячее", "горячие закуски"]},
+            "десерты":          {"portions_total": 2, "varieties": 3, "keywords": ["десерт", "выпечка"]},
+            "напитки холодные": {"portions_total": 3, "varieties": 2, "keywords": ["прохладительные", "напитки", "лимонад", "морс"]},
+            "напитки горячие":  {"portions_total": 1, "varieties": 1, "keywords": ["горячие напитки", "чай", "кофе"]},
         },
         "Банкет": {
-            "закуски":          {"portions": 1, "count": 2, "keywords": ["закуски", "канапе"]},
-            "салаты":           {"portions": 1, "count": 2, "keywords": ["салаты", "салат"]},
-            "горячее":          {"portions": 1, "count": 2, "keywords": ["банкетное горячее", "горячее"]},
-            "десерты":          {"portions": 2, "count": 2, "keywords": ["десерт", "выпечка"]},
-            "напитки холодные": {"portions": 3, "count": 2, "keywords": ["прохладительные", "лимонад", "морс"]},
-            "напитки горячие":  {"portions": 1, "count": 1, "keywords": ["горячие напитки", "чай", "кофе"]},
+            "закуски":          {"portions_total": 1, "varieties": 2, "keywords": ["закуски", "канапе"]},
+            "салаты":           {"portions_total": 1, "varieties": 2, "keywords": ["салаты", "салат"]},
+            "горячее":          {"portions_total": 1, "varieties": 2, "keywords": ["банкетное горячее", "горячее"]},
+            "десерты":          {"portions_total": 2, "varieties": 2, "keywords": ["десерт", "выпечка"]},
+            "напитки холодные": {"portions_total": 3, "varieties": 2, "keywords": ["прохладительные", "лимонад", "морс"]},
+            "напитки горячие":  {"portions_total": 1, "varieties": 1, "keywords": ["горячие напитки", "чай", "кофе"]},
         },
         "BBQ": {
-            "bbq":              {"portions": 3, "count": 3, "keywords": ["ввq", "bbq", "шашлык", "гриль"]},
-            "салаты":           {"portions": 1, "count": 2, "keywords": ["салаты", "допы"]},
-            "десерты":          {"portions": 1, "count": 2, "keywords": ["десерт", "фрукты"]},
-            "напитки холодные": {"portions": 3, "count": 2, "keywords": ["прохладительные", "лимонад", "морс"]},
-            "напитки горячие":  {"portions": 1, "count": 1, "keywords": ["горячие напитки", "чай"]},
+            "bbq":              {"portions_total": 3, "varieties": 3, "keywords": ["ввq", "bbq", "шашлык", "гриль"]},
+            "салаты":           {"portions_total": 1, "varieties": 2, "keywords": ["салаты", "допы"]},
+            "десерты":          {"portions_total": 1, "varieties": 2, "keywords": ["десерт", "фрукты"]},
+            "напитки холодные": {"portions_total": 3, "varieties": 2, "keywords": ["прохладительные", "лимонад", "морс"]},
+            "напитки горячие":  {"portions_total": 1, "varieties": 1, "keywords": ["горячие напитки", "чай"]},
         },
     }
 
     required = REQUIRED_CATS.get(fmt, REQUIRED_CATS["Фуршет"])
 
-    def find_menu_cat(keywords: list) -> tuple:
+    def find_menu_cat(keywords):
         menu_lower = {k.lower(): k for k in menu.keys()}
         for kw in keywords:
             for cat_low, cat_orig in menu_lower.items():
@@ -152,46 +156,53 @@ def auto_select_menu(fmt: str, guests: int, food_budget: float, target_weight: i
     total_cost = 0
     total_weight = 0
 
-    # Считаем бюджет на категорию
-    n_cats = len(required)
-    budget_per_cat = food_budget / n_cats
-
     for cat_name, cfg in required.items():
-        portions_pp = cfg["portions"]
-        count = cfg["count"]
+        portions_total = cfg["portions_total"]  # всего порций на гостя
+        varieties = cfg["varieties"]             # сколько видов
         keywords = cfg["keywords"]
 
         found_cat, items = find_menu_cat(keywords)
         if not found_cat or not items:
             continue
 
-        total_portions = portions_pp * guests
+        # Порций каждого вида = total / varieties (минимум 1)
+        portions_each = max(1, round(portions_total / varieties))
+        qty_each = portions_each * guests  # штук каждого вида
 
-        # Сортируем по цене — берём самые доступные
+        # Сортируем по цене — берём доступные
         items_sorted = sorted(items, key=lambda x: x['price'])
 
-        # Считаем бюджет на эту категорию
-        cat_budget = budget_per_cat
-        remaining_budget = food_budget - total_cost
-        cat_budget = min(cat_budget, remaining_budget * 0.9)
+        # Перемешиваем немного для разнообразия (берём из первой половины)
+        half = max(varieties * 2, len(items_sorted) // 2)
+        candidates = items_sorted[:half]
+        random.shuffle(candidates)
 
         picked = 0
-        for item in items_sorted:
-            if picked >= count:
+        for item in candidates:
+            if picked >= varieties:
                 break
 
-            cost = item['price'] * total_portions
+            cost = item['price'] * qty_each
 
-            # ✅ Проверяем бюджет — пропускаем если не вписывается
-            if total_cost + cost > food_budget * 1.05:
-                continue
+            # Проверяем бюджет
+            if total_cost + cost > food_budget * 1.02:
+                # Пробуем взять меньше порций
+                qty_reduced = max(guests // 4, guests // varieties)
+                cost_reduced = item['price'] * qty_reduced
+                if total_cost + cost_reduced <= food_budget * 1.02:
+                    qty_each_use = qty_reduced
+                    cost = cost_reduced
+                else:
+                    continue
+            else:
+                qty_each_use = qty_each
 
-            weight_pp = item['weight'] * portions_pp
+            weight_pp = item['weight'] * (qty_each_use / guests)
             selected.append({
                 "category": cat_name.upper(),
                 "name": item['name'],
-                "qty": total_portions,
-                "qty_label": f"{total_portions} порц.",
+                "qty": qty_each_use,
+                "qty_label": f"{qty_each_use} порц.",
                 "price": item['price'],
                 "price_label": f"{item['price']:.0f} руб.",
                 "total": cost,
