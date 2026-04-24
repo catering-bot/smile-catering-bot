@@ -122,7 +122,8 @@ def cat_header(name, subtitle=""):
     return r
 
 def generate_pdf(event: dict, selected: list, staff: dict, food_total: float, staff_total: float, grand_total: float,
-                 version: str = "internal", discount_label: str = None, discount_amount: float = 0, final_total: float = None) -> str:
+                 version: str = "internal", discount_label: str = None, discount_amount: float = 0, final_total: float = None,
+                 logistics_result: dict = None) -> str:
     import logging
     logging.info(f"generate_pdf: старт ({version})")
 
@@ -358,11 +359,73 @@ def generate_pdf(event: dict, selected: list, staff: dict, food_total: float, st
     story.append(notes)
     story.append(Spacer(1, 4*mm))
 
+    # ── ЛОГИСТИКА (если выбрана) ──
+    if logistics_result:
+        lr = logistics_result
+        story.append(cat_header("ЛОГИСТИКА"))
+
+        for i, item in enumerate(lr.get("furniture", [])):
+            if item["price"] > 0:
+                bg = DARK_BG if i%2==0 else colors.HexColor('#161616')
+                row = Table([[
+                    Paragraph(f"  {item['name']}", ST('dish')),
+                    Paragraph(f"{item['qty']} шт.", ST('qty')),
+                    Paragraph(f"{item['price']:,} руб.".replace(',', ' '), ST('price')),
+                    Paragraph(f"{item['cost']:,} руб.".replace(',', ' '), ST('amount')),
+                ]], colWidths=[CW*0.5, CW*0.16, CW*0.16, CW*0.18])
+                row.setStyle(TableStyle([
+                    ('BACKGROUND', (0,0), (-1,-1), bg),
+                    ('TOPPADDING', (0,0), (-1,-1), 5), ('BOTTOMPADDING', (0,0), (-1,-1), 5),
+                    ('LEFTPADDING', (0,0), (0,-1), 6), ('RIGHTPADDING', (-1,0), (-1,-1), 10),
+                    ('LINEBELOW', (0,0), (-1,-1), 0.3, DARK3),
+                ]))
+                story.append(row)
+
+        pkg = lr.get('servicing_package', '')
+        pkg_cost = lr.get('servicing_cost', 0)
+        g = lr.get('guests', 1)
+        pkg_price = pkg_cost // g if g else 0
+        row = Table([[
+            Paragraph(f"  Сервировка: {pkg}", ST('dish')),
+            Paragraph(f"{g} чел.", ST('qty')),
+            Paragraph(f"{pkg_price:,} руб.".replace(',', ' '), ST('price')),
+            Paragraph(f"{pkg_cost:,} руб.".replace(',', ' '), ST('amount')),
+        ]], colWidths=[CW*0.5, CW*0.16, CW*0.16, CW*0.18])
+        row.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#161616')),
+            ('TOPPADDING', (0,0), (-1,-1), 5), ('BOTTOMPADDING', (0,0), (-1,-1), 5),
+            ('LEFTPADDING', (0,0), (0,-1), 6), ('RIGHTPADDING', (-1,0), (-1,-1), 10),
+            ('LINEBELOW', (0,0), (-1,-1), 0.3, DARK3),
+        ]))
+        story.append(row)
+
+        delivery_cost = lr.get('delivery_cost', 0) * lr.get('trips_needed', 1)
+        row = Table([[
+            Paragraph(f"  Доставка {lr.get('delivery_zone','Москва')} — {lr.get('trips_needed',1)} рейс(а)", ST('dish')),
+            Paragraph("", ST('qty')),
+            Paragraph("", ST('price')),
+            Paragraph(f"{delivery_cost:,} руб.".replace(',', ' '), ST('amount')),
+        ]], colWidths=[CW*0.5, CW*0.16, CW*0.16, CW*0.18])
+        row.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,-1), DARK_BG),
+            ('TOPPADDING', (0,0), (-1,-1), 5), ('BOTTOMPADDING', (0,0), (-1,-1), 5),
+            ('LEFTPADDING', (0,0), (0,-1), 6), ('RIGHTPADDING', (-1,0), (-1,-1), 10),
+            ('LINEBELOW', (0,0), (-1,-1), 0.3, DARK3),
+        ]))
+        story.append(row)
+        story.append(Spacer(1, 3*mm))
+
     # ── ИТОГО ──
     lt_rows = [
         [Paragraph("Стоимость меню:", ST('total_l')), Paragraph(fmt(food_total), ST('total_v'))],
         [Paragraph("Персонал:", ST('total_l')), Paragraph(fmt(staff_total), ST('total_v'))],
     ]
+
+    if logistics_result:
+        lt_rows.append([
+            Paragraph("Логистика:", ST('total_l')),
+            Paragraph(fmt(logistics_result['total_logistics']), ST('total_v')),
+        ])
 
     if discount_label and discount_amount:
         lt_rows.append([
@@ -409,3 +472,4 @@ def generate_pdf(event: dict, selected: list, staff: dict, food_total: float, st
     doc.build(story, onFirstPage=dark_bg, onLaterPages=dark_bg)
     logging.info(f"generate_pdf: PDF готов! {out_path}")
     return out_path
+                     
