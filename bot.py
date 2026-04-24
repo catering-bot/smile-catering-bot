@@ -140,7 +140,6 @@ def auto_select_menu(fmt: str, guests: int, food_budget: float, target_weight: i
     required = REQUIRED_CATS.get(fmt, REQUIRED_CATS["Фуршет"])
 
     def find_menu_cat(keywords: list) -> tuple:
-        """Находит категорию в меню по ключевым словам"""
         menu_lower = {k.lower(): k for k in menu.keys()}
         for kw in keywords:
             for cat_low, cat_orig in menu_lower.items():
@@ -152,37 +151,42 @@ def auto_select_menu(fmt: str, guests: int, food_budget: float, target_weight: i
     selected = []
     total_cost = 0
     total_weight = 0
-    budget_per_cat = food_budget / len(required)
+
+    # Считаем бюджет на категорию
+    n_cats = len(required)
+    budget_per_cat = food_budget / n_cats
 
     for cat_name, cfg in required.items():
         portions_pp = cfg["portions"]
         count = cfg["count"]
         keywords = cfg["keywords"]
 
-        # Находим нужную категорию в меню
         found_cat, items = find_menu_cat(keywords)
         if not found_cat or not items:
             continue
 
         total_portions = portions_pp * guests
 
-        # Перемешиваем для разнообразия
-        items_shuffled = items.copy()
-        random.shuffle(items_shuffled)
+        # Сортируем по цене — берём самые доступные
+        items_sorted = sorted(items, key=lambda x: x['price'])
 
-        # Сортируем по цене (средний диапазон — не самые дешёвые и не самые дорогие)
-        items_sorted = sorted(items_shuffled, key=lambda x: x['price'])
-        mid = len(items_sorted) // 4
-        items_mid = items_sorted[mid:] if len(items_sorted) > 4 else items_sorted
+        # Считаем бюджет на эту категорию
+        cat_budget = budget_per_cat
+        remaining_budget = food_budget - total_cost
+        cat_budget = min(cat_budget, remaining_budget * 0.9)
 
         picked = 0
-        for item in items_mid:
+        for item in items_sorted:
             if picked >= count:
                 break
 
             cost = item['price'] * total_portions
-            weight_pp = item['weight'] * portions_pp
 
+            # ✅ Проверяем бюджет — пропускаем если не вписывается
+            if total_cost + cost > food_budget * 1.05:
+                continue
+
+            weight_pp = item['weight'] * portions_pp
             selected.append({
                 "category": cat_name.upper(),
                 "name": item['name'],
