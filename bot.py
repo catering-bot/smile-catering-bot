@@ -754,51 +754,77 @@ async def generate_and_send_pdf(update: Update, context: ContextTypes.DEFAULT_TY
 
 async def ask_logistics(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
-    if "Готово" in text or "готово" in text:
-        await update.message.reply_text("👍 Хорошо! Напишите /smeta для новой сметы.", reply_markup=ReplyKeyboardRemove())
+
+    if "Готово" in text:
+        await update.message.reply_text(
+            "👍 Готово! Напишите /smeta для новой сметы.",
+            reply_markup=ReplyKeyboardRemove()
+        )
         return ConversationHandler.END
 
-    from logistics import LOGISTICS
-    fmt = context.user_data.get('format', 'Фуршет')
-    config = LOGISTICS.get(fmt, LOGISTICS["Фуршет"])
-    packages = config.get("сервировка_пакеты", {})
+    if "Логистику" in text:
+        from logistics import LOGISTICS
+        fmt = context.user_data.get('format', 'Фуршет')
+        config = LOGISTICS.get(fmt, LOGISTICS["Фуршет"])
+        packages = list(config.get("сервировка_пакеты", {}).keys())
+        keyboard = [[p] for p in packages]
+        context.user_data['logistics_package'] = None
+        await update.message.reply_text(
+            "🍽️ Выберите пакет сервировки:",
+            reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
+        )
+        return LOGISTICS_ZONE
 
-    keyboard = [[p] for p in packages.keys()]
-    await update.message.reply_text(
-        "🍽️ Выберите пакет сервировки:",
-        reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
-    )
+    await update.message.reply_text("Пожалуйста выберите из предложенных вариантов.")
     return LOGISTICS_PACKAGE
 
 async def get_logistics_package(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['logistics_package'] = update.message.text
-    keyboard = [["📍 Москва", "📍 МО (Московская область)"]]
+    keyboard = [["📍 Москва", "📍 МО"]]
     await update.message.reply_text(
         "📍 Куда доставка?",
         reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
     )
-    return LOGISTICS_ZONE
+    return 15
 
 async def get_logistics_zone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     from logistics import calc_logistics, format_logistics_message
 
-    zone = "МО" if "МО" in update.message.text else "Москва"
+    text = update.message.text
+
+    # Первый вызов — выбор пакета сервировки
+    if not context.user_data.get('logistics_package'):
+        context.user_data['logistics_package'] = text
+        keyboard = [["📍 Москва", "📍 МО"]]
+        await update.message.reply_text(
+            "📍 Куда доставка?",
+            reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
+        )
+        return LOGISTICS_ZONE
+
+    # Второй вызов — выбор зоны и расчёт
+    zone = "МО" if "МО" in text else "Москва"
     fmt = context.user_data.get('format', 'Фуршет')
     guests = context.user_data.get('guests', 50)
     package = context.user_data.get('logistics_package', '')
 
-    result = calc_logistics(fmt, guests, package, zone)
-    msg = format_logistics_message(result)
+    try:
+        result = calc_logistics(fmt, guests, package, zone)
+        msg = format_logistics_message(result)
+        await update.message.reply_text(msg, reply_markup=ReplyKeyboardRemove())
+        await update.message.reply_text(
+            f"✅ Логистика рассчитана!\n"
+            f"💰 Итого: {result['total_logistics']:,} руб.\n\n"
+            f"Напишите /smeta для новой сметы.".replace(',', ' ')
+        )
+    except Exception as e:
+        logging.error(f"Ошибка логистики: {e}")
+        await update.message.reply_text(
+            f"❌ Ошибка: {e}\nНапишите /smeta для новой сметы.",
+            reply_markup=ReplyKeyboardRemove()
+        )
 
-    await update.message.reply_text(msg, reply_markup=ReplyKeyboardRemove())
-
-    # Предлагаем добавить в смету
-    keyboard = [["➕ Добавить в смету и пересчитать", "✅ Готово"]]
-    await update.message.reply_text(
-        f"💰 Добавить логистику ({result['total_logistics']:,} руб.) к общей смете?".replace(',', ' '),
-        reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
-    )
-    context.user_data['logistics_result'] = result
+    context.user_data['logistics_package'] = None
     return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -842,8 +868,7 @@ def main():
             DISCOUNT:           [MessageHandler(filters.TEXT & ~filters.COMMAND, get_discount),
                                  MessageHandler(filters.TEXT & ~filters.COMMAND, get_custom_discount)],
             MANUAL_ITEMS:       [MessageHandler(filters.TEXT & ~filters.COMMAND, manual_select_item)],
-            LOGISTICS_PACKAGE:  [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_logistics),
-                                 MessageHandler(filters.TEXT & ~filters.COMMAND, get_logistics_package)],
+            LOGISTICS_PACKAGE:  [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_logistics)],
             LOGISTICS_ZONE:     [MessageHandler(filters.TEXT & ~filters.COMMAND, get_logistics_zone)],
         },
         fallbacks=[
